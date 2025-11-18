@@ -225,7 +225,7 @@ def _align_climatology(clim, obs, time_dim="time"):
         # Step 1: advanced index along dayofyear
         mapped = clim.sel(dayofyear=obs_doy)
 
-        # ❗ IMPORTANT: remove any pre-existing "time" coordinate
+        # IMPORTANT: remove any pre-existing "time" coordinate
         if "time" in mapped.coords:
             mapped = mapped.drop_vars("time")
 
