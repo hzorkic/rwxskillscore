@@ -1,5 +1,4 @@
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
@@ -84,43 +83,23 @@ def plot_rank_histogram_map_cartopy(
     dim: str = "time",
     rank: int = 1,
     normalize: bool = True,
+    use_bias: bool = False,
     projection=ccrs.Robinson(),
-    cmap="viridis",
     figsize=(14, 6),
 ):
     """
-    Plot a proper global spatial map of rank-histogram frequency using Cartopy.
+    Plot a global spatial map of rank-histogram frequency or bias.
 
-    Parameters
-    ----------
-    observations : xr.DataArray
-        Observations with dims including `time`, `lat`, `lon`.
-    forecasts : xr.DataArray
-        Forecasts with `member_dim`.
-    member_dim : str
-        Ensemble member dimension name.
-    dim : str
-        Dimension over which histogram is computed (usually "time").
-    rank : int
-        Which rank to plot (1 ... n_members+1).
-    normalize : bool
-        If True, show frequency; else show counts.
-    projection : cartopy.crs
-        Cartopy projection (default: Robinson).
-    cmap : str
-        Colormap.
-    figsize : tuple
-        Figure size.
-
-    Returns
-    -------
-    freq : xr.DataArray
-        The plotted spatial frequency/count field.
+    Raw Frequency	“Where does rank 1 happen often?”	viridis	Uniform, no zero center needed
+    Bias Map	“Where is model skewed low/high?”	RdBu_r	Symmetric around zero
+    Spread/Uncertainty	“Where is ensemble flat?”	cividis	Good for accessibility
+    Probabilistic skill	“Which areas are improving?”	PuOr_r	Strong contrast for ± skill
     """
 
-    # ---------------------------------------------------------
-    # (1) Compute rank histogram
-    # ---------------------------------------------------------
+    # Align coordinates
+    observations, forecasts = xr.align(observations, forecasts, join="inner")
+
+    # Compute histogram
     rh = rank_histogram(
         observations=observations,
         forecasts=forecasts,
@@ -130,44 +109,41 @@ def plot_rank_histogram_map_cartopy(
     )
     n_ranks = rh.sizes["rank"]
 
-    if not (1 <= rank <= n_ranks):
-        raise ValueError(f"Rank must be in [1, {n_ranks}], got {rank}")
+    freq = rh.isel(rank=rank - 1) / observations.sizes[dim]
 
-    # rank index = rank - 1
-    freq = rh.isel(rank=rank - 1)
-
-    if normalize:
-        total = rh.sum("rank")
-        freq = freq / total
-
-    # ---------------------------------------------------------
-    # (2) Prepare grid for Cartopy
-    # ---------------------------------------------------------
-    lat = freq["lat"].values
-    lon = freq["lon"].values
+    # Choose colormap
+    if use_bias:
+        expected = 1 / n_ranks
+        field = freq - expected
+        vmax = np.abs(field).max()
+        vmin = -vmax
+        cmap = "RdBu_r"
+    else:
+        field = freq
+        vmin = 0.0
+        vmax = float(field.max())
+        cmap = "viridis"
 
     # Meshgrid
+    lat = field["lat"].values
+    lon = field["lon"].values
     lon2d, lat2d = np.meshgrid(lon, lat)
 
-    # ---------------------------------------------------------
-    # (3) Plot with Cartopy
-    # ---------------------------------------------------------
+    # Plot
     fig = plt.figure(figsize=figsize)
     ax = plt.axes(projection=projection)
     ax.set_global()
-
-    # Add coastlines, borders, and gridlines
     ax.coastlines(linewidth=0.7)
-    ax.add_feature(cfeature.BORDERS, linewidth=0.3)
-    ax.gridlines(draw_labels=False, linewidth=0.2, alpha=0.5)
+    ax.gridlines(draw_labels=False, linewidth=0.3, alpha=0.5)
 
-    # Plot using PlateCarree coordinates
     pcm = ax.pcolormesh(
         lon2d,
         lat2d,
-        freq.values,
+        field,
         transform=ccrs.PlateCarree(),
         cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
         shading="auto",
     )
 
@@ -176,11 +152,10 @@ def plot_rank_histogram_map_cartopy(
         orientation="horizontal",
         pad=0.04,
         fraction=0.05,
-        label=f"Rank {rank} Frequency" if normalize else f"Rank {rank} Count",
+        label="Bias (freq - expected)" if use_bias else "Frequency",
     )
 
-    plt.title(f"Rank Histogram Spatial Map (Rank={rank}, dim='{dim}')")
-    plt.tight_layout()
+    plt.title(f"Rank Histogram Spatial Map (Rank={rank}, {'bias' if use_bias else 'frequency'})")
     plt.show()
 
-    return freq
+    return field

@@ -40,6 +40,8 @@ from xskillscore.core.resampling import resample_iterations, resample_iterations
 from xskillscore.core.stattests import multipletests
 from xskillscore.versioning.print_versions import show_versions
 
+from xskillscore.core.viz import plot_rank_histogram, plot_rank_histogram_map_cartopy
+
 __all__ = [
     # deterministic
     "effective_sample_size",
@@ -75,6 +77,9 @@ __all__ = [
     "resample_iterations_idx",
     "multipletests",
     "show_versions",
+    # viz
+    "plot_rank_histogram",
+    "plot_rank_histogram_map_cartopy",
 ]
 
 
